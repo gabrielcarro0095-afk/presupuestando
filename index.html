@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Presupuestando">
 <title>Presupuestando</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f7;color:#1d1d1f;min-height:100vh}
@@ -52,11 +53,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pago-btn{padding:14px 10px;border:2px solid #e5e5e5;border-radius:14px;background:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;color:#6e6e73;text-align:center;transition:all 0.15s}
 .pago-btn.selected-debito{border-color:#34c759;background:#f0fff4;color:#1d9e3e}
 .pago-btn.selected-credito{border-color:#af52de;background:#faf0ff;color:#7a2fa0}
+.moneda-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.moneda-btn{padding:14px 10px;border:2px solid #e5e5e5;border-radius:14px;background:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;color:#6e6e73;text-align:center;transition:all 0.15s}
+.moneda-btn.selected-ars{border-color:#007aff;background:#f0f7ff;color:#0055cc}
+.moneda-btn.selected-usd{border-color:#ff9500;background:#fff8f0;color:#cc7000}
 .btn-primary{width:100%;padding:14px;background:#007aff;color:#fff;border:none;border-radius:14px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit}
 .btn-primary:active{background:#0062cc}
 .btn-export{background:#f2f2f7;border:none;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:500;color:#1d1d1f;cursor:pointer;font-family:inherit}
 .filter-row{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto}
-.filter-row select{flex:1;min-width:120px;padding:8px 12px;font-size:13px;border:1px solid #e5e5e5;border-radius:10px;background:#fff;color:#1d1d1f;font-family:inherit;-webkit-appearance:none}
+.filter-row select{flex:1;min-width:110px;padding:8px 12px;font-size:13px;border:1px solid #e5e5e5;border-radius:10px;background:#fff;color:#1d1d1f;font-family:inherit;-webkit-appearance:none}
 .presup-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f2f2f7}
 .presup-row:last-child{border-bottom:none}
 .presup-name{font-size:14px;color:#1d1d1f;flex:1}
@@ -67,10 +72,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pago-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;margin-left:4px}
 .badge-debito{background:#f0fff4;color:#1d9e3e}
 .badge-credito{background:#faf0ff;color:#7a2fa0}
+.badge-usd{background:#fff8f0;color:#cc7000}
 .pago-split{display:flex;gap:8px}
 .pago-split-item{flex:1;background:#f2f2f7;border-radius:12px;padding:12px;text-align:center}
 .pago-split-label{font-size:11px;color:#6e6e73;margin-bottom:4px}
 .pago-split-val{font-size:16px;font-weight:700}
+.loading{text-align:center;padding:20px;color:#6e6e73;font-size:14px}
+.sync-indicator{font-size:11px;color:#6e6e73;text-align:right;margin-bottom:8px}
+.sync-ok{color:#34c759}
+.sync-err{color:#ff3b30}
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
 .tab-content{display:none}
 .tab-content.active{display:block}
@@ -81,7 +91,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="header" style="display:flex;align-items:center;justify-content:space-between">
   <div>
     <h1>Presupuestando 💰</h1>
-    <p>Control de gastos personales</p>
+    <p id="sync-status" class="sync-indicator">Conectando...</p>
   </div>
   <button class="btn-export" onclick="exportCSV()">Exportar</button>
 </div>
@@ -103,6 +113,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="metric-grid" id="metrics"></div>
     <div class="card" id="pago-split-card"></div>
+    <div class="card" id="moneda-split-card"></div>
     <div class="card">
       <div class="section-title">Por categoría</div>
       <div id="chart-cats"></div>
@@ -117,8 +128,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card">
       <div class="section-title" style="margin-bottom:16px">Nuevo gasto</div>
       <div class="form-group">
-        <label>Monto ($)</label>
+        <label>Monto</label>
         <input type="number" id="f-monto" placeholder="0" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label>Moneda</label>
+        <div class="moneda-btns">
+          <button class="moneda-btn selected-ars" id="btn-ars" onclick="selMoneda('ARS')">🇦🇷 Pesos (ARS)</button>
+          <button class="moneda-btn" id="btn-usd" onclick="selMoneda('USD')">🇺🇸 Dólares (USD)</button>
+        </div>
       </div>
       <div class="form-group">
         <label>Descripción</label>
@@ -143,7 +161,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <label>Fecha</label>
         <input type="date" id="f-fecha">
       </div>
-      <button class="btn-primary" onclick="agregarGasto()">Guardar gasto</button>
+      <button class="btn-primary" id="btn-guardar" onclick="agregarGasto()">Guardar gasto</button>
     </div>
   </div>
 
@@ -156,13 +174,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <option value="debito">Débito/QR</option>
         <option value="credito">Crédito</option>
       </select>
+      <select id="filtro-moneda" onchange="renderHistorial()">
+        <option value="">ARS+USD</option>
+        <option value="ARS">Solo ARS</option>
+        <option value="USD">Solo USD</option>
+      </select>
     </div>
     <div class="card"><div id="lista-historial"></div></div>
   </div>
 
   <div id="tab-presupuestos" class="tab-content">
     <div class="card" style="margin-bottom:14px">
-      <div class="section-title">Este mes vs límite</div>
+      <div class="section-title">Este mes vs límite (ARS)</div>
       <div id="lista-presupuestos"></div>
     </div>
     <div class="card">
@@ -176,6 +199,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
+const SUPABASE_URL = 'https://pdlznbvyzohxulwchldz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_1U2PNqNOdZB3ub9g8B8mmA_RmMeu98m';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const CATS_DEFAULT=[
   {name:'Comida',color:'#34c759'},
   {name:'Transporte',color:'#007aff'},
@@ -189,26 +216,57 @@ const CATS_DEFAULT=[
 
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
-function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function loadLocal(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function saveLocal(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 
-let gastos=load('pb2_gastos',[]);
-let cats=load('pb2_cats',CATS_DEFAULT);
-let presupuestos=load('pb2_presup',{});
+let gastos=[];
+let cats=loadLocal('pb3_cats',CATS_DEFAULT);
+let presupuestos=loadLocal('pb3_presup',{});
 let pagoSel='debito';
+let monedaSel='ARS';
 
 const now=new Date();
 let viewYear=now.getFullYear();
 let viewMonth=now.getMonth();
 
-function fmt(n){return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n)}
+function fmt(n,moneda='ARS'){
+  if(moneda==='USD') return 'U$S '+new Intl.NumberFormat('es-AR',{maximumFractionDigits:2}).format(n);
+  return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n);
+}
 function fmtDate(d){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`}
 function catColor(n){const c=cats.find(c=>c.name===n);return c?c.color:'#8e8e93'}
+
+async function cargarGastos(){
+  try{
+    const{data,error}=await sb.from('gastos').select('*').order('fecha',{ascending:false});
+    if(error)throw error;
+    gastos=data.map(g=>({
+      id:g.id,
+      monto:parseFloat(g.monto),
+      desc:g.descripcion||'',
+      cat:g.categoria,
+      fecha:g.fecha,
+      pago:g.pago||'debito',
+      moneda:g.moneda||'ARS'
+    }));
+    document.getElementById('sync-status').textContent='✓ Sincronizado';
+    document.getElementById('sync-status').className='sync-indicator sync-ok';
+  }catch(e){
+    document.getElementById('sync-status').textContent='Sin conexión';
+    document.getElementById('sync-status').className='sync-indicator sync-err';
+  }
+}
 
 function selPago(p){
   pagoSel=p;
   document.getElementById('btn-debito').className='pago-btn'+(p==='debito'?' selected-debito':'');
   document.getElementById('btn-credito').className='pago-btn'+(p==='credito'?' selected-credito':'');
+}
+
+function selMoneda(m){
+  monedaSel=m;
+  document.getElementById('btn-ars').className='moneda-btn'+(m==='ARS'?' selected-ars':'');
+  document.getElementById('btn-usd').className='moneda-btn'+(m==='USD'?' selected-usd':'');
 }
 
 function switchTab(t){
@@ -237,11 +295,13 @@ function gastosDelMes(y,m){
 function renderResumen(){
   document.getElementById('mes-label').textContent=`${MESES[viewMonth]} ${viewYear}`;
   const mg=gastosDelMes(viewYear,viewMonth);
-  const total=mg.reduce((s,g)=>s+g.monto,0);
+  const mgARS=mg.filter(g=>g.moneda==='ARS'||!g.moneda);
+  const total=mgARS.reduce((s,g)=>s+g.monto,0);
   const pm=viewMonth===0?11:viewMonth-1;
   const py=viewMonth===0?viewYear-1:viewYear;
-  const prevTotal=gastosDelMes(py,pm).reduce((s,g)=>s+g.monto,0);
-  const dias=new Set(mg.map(g=>g.fecha)).size;
+  const prevMg=gastosDelMes(py,pm).filter(g=>g.moneda==='ARS'||!g.moneda);
+  const prevTotal=prevMg.reduce((s,g)=>s+g.monto,0);
+  const dias=new Set(mgARS.map(g=>g.fecha)).size;
   const prom=dias?total/dias:0;
   const diff=prevTotal?((total-prevTotal)/prevTotal*100):null;
   const diffStr=diff!==null?`${diff>0?'▲':'▼'} ${Math.abs(diff).toFixed(1)}% vs mes anterior`:'';
@@ -249,7 +309,7 @@ function renderResumen(){
 
   document.getElementById('metrics').innerHTML=`
     <div class="metric full">
-      <div class="metric-label">Total del mes</div>
+      <div class="metric-label">Total del mes (ARS)</div>
       <div class="metric-value">${fmt(total)}</div>
       ${diff!==null?`<div class="metric-sub" style="color:${diffColor}">${diffStr}</div>`:''}
     </div>
@@ -263,10 +323,10 @@ function renderResumen(){
     </div>
   `;
 
-  const totalDeb=mg.filter(g=>g.pago==='debito'||!g.pago).reduce((s,g)=>s+g.monto,0);
-  const totalCred=mg.filter(g=>g.pago==='credito').reduce((s,g)=>s+g.monto,0);
+  const totalDeb=mgARS.filter(g=>g.pago==='debito'||!g.pago).reduce((s,g)=>s+g.monto,0);
+  const totalCred=mgARS.filter(g=>g.pago==='credito').reduce((s,g)=>s+g.monto,0);
   document.getElementById('pago-split-card').innerHTML=`
-    <div class="section-title">Débito vs Crédito</div>
+    <div class="section-title">Débito vs Crédito (ARS)</div>
     <div class="pago-split">
       <div class="pago-split-item">
         <div class="pago-split-label">💳 Débito / QR</div>
@@ -279,8 +339,24 @@ function renderResumen(){
     </div>
   `;
 
+  const mgUSD=mg.filter(g=>g.moneda==='USD');
+  const totalUSD=mgUSD.reduce((s,g)=>s+g.monto,0);
+  document.getElementById('moneda-split-card').innerHTML=`
+    <div class="section-title">Gastos en USD</div>
+    <div class="pago-split">
+      <div class="pago-split-item">
+        <div class="pago-split-label">🇦🇷 Pesos</div>
+        <div class="pago-split-val" style="color:#0055cc">${fmt(total)}</div>
+      </div>
+      <div class="pago-split-item">
+        <div class="pago-split-label">🇺🇸 Dólares</div>
+        <div class="pago-split-val" style="color:#cc7000">${fmt(totalUSD,'USD')}</div>
+      </div>
+    </div>
+  `;
+
   const byCat={};
-  mg.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
+  mgARS.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
   const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
 
   if(!sorted.length){
@@ -304,10 +380,13 @@ function renderResumen(){
       <div class="gasto-item">
         <div class="cat-dot" style="background:${catColor(g.cat)}"></div>
         <div class="gasto-info">
-          <div class="gasto-desc">${g.desc||g.cat}<span class="pago-badge ${g.pago==='credito'?'badge-credito':'badge-debito'}">${g.pago==='credito'?'Crédito':'Débito'}</span></div>
+          <div class="gasto-desc">${g.desc||g.cat}
+            <span class="pago-badge ${g.pago==='credito'?'badge-credito':'badge-debito'}">${g.pago==='credito'?'Crédito':'Débito'}</span>
+            ${g.moneda==='USD'?'<span class="pago-badge badge-usd">USD</span>':''}
+          </div>
           <div class="gasto-meta">${g.cat} · ${fmtDate(g.fecha)}</div>
         </div>
-        <div class="gasto-monto">${fmt(g.monto)}</div>
+        <div class="gasto-monto">${fmt(g.monto,g.moneda)}</div>
       </div>
     `).join('');
   }
@@ -318,9 +397,10 @@ function initAgregar(){
   const t=new Date();
   document.getElementById('f-fecha').value=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   selPago('debito');
+  selMoneda('ARS');
 }
 
-function agregarGasto(){
+async function agregarGasto(){
   const monto=parseFloat(document.getElementById('f-monto').value);
   const desc=document.getElementById('f-desc').value.trim();
   const catSel=document.getElementById('f-cat').value;
@@ -332,33 +412,59 @@ function agregarGasto(){
   if(catNueva&&!cats.find(c=>c.name===catNueva)){
     const palette=['#34c759','#007aff','#5856d6','#ff3b30','#ff9500','#af52de','#00c7be','#8e8e93'];
     cats.push({name:catNueva,color:palette[cats.length%palette.length]});
-    save('pb2_cats',cats);
+    saveLocal('pb3_cats',cats);
   }
-  gastos.push({id:Date.now(),monto,desc,cat,fecha,pago:pagoSel});
-  save('pb2_gastos',gastos);
-  document.getElementById('f-monto').value='';
-  document.getElementById('f-desc').value='';
-  document.getElementById('f-nueva-cat').value='';
-  showToast('✓ Gasto guardado');
-  switchTab('resumen');
+
+  const btn=document.getElementById('btn-guardar');
+  btn.textContent='Guardando...';
+  btn.disabled=true;
+
+  try{
+    const{error}=await sb.from('gastos').insert({
+      monto,
+      descripcion:desc,
+      categoria:cat,
+      fecha,
+      pago:pagoSel,
+      moneda:monedaSel
+    });
+    if(error)throw error;
+    await cargarGastos();
+    document.getElementById('f-monto').value='';
+    document.getElementById('f-desc').value='';
+    document.getElementById('f-nueva-cat').value='';
+    showToast('✓ Gasto guardado');
+    switchTab('resumen');
+  }catch(e){
+    showToast('Error al guardar');
+  }finally{
+    btn.textContent='Guardar gasto';
+    btn.disabled=false;
+  }
 }
 
 function renderHistorial(){
   const fMes=document.getElementById('filtro-mes');
   const fCat=document.getElementById('filtro-cat');
   const fPago=document.getElementById('filtro-pago');
+  const fMoneda=document.getElementById('filtro-moneda');
   const mesesDisp=[...new Set(gastos.map(g=>g.fecha.slice(0,7)))].sort().reverse();
+  const prevMes=fMes.value;
+  const prevCat=fCat.value;
   fMes.innerHTML='<option value="">Todos los meses</option>'+mesesDisp.map(m=>{
     const[y,mo]=m.split('-');
     return`<option value="${m}">${MESES[parseInt(mo)-1]} ${y}</option>`;
   }).join('');
   fCat.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+  if(prevMes)fMes.value=prevMes;
+  if(prevCat)fCat.value=prevCat;
   let f=gastos.slice();
-  const mV=fMes.value,cV=fCat.value,pV=fPago.value;
+  const mV=fMes.value,cV=fCat.value,pV=fPago.value,mnV=fMoneda.value;
   if(mV)f=f.filter(g=>g.fecha.startsWith(mV));
   if(cV)f=f.filter(g=>g.cat===cV);
   if(pV==='debito')f=f.filter(g=>g.pago==='debito'||!g.pago);
   if(pV==='credito')f=f.filter(g=>g.pago==='credito');
+  if(mnV)f=f.filter(g=>(g.moneda||'ARS')===mnV);
   f.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   if(!f.length){
     document.getElementById('lista-historial').innerHTML='<div class="empty">Sin gastos con ese filtro</div>';
@@ -368,24 +474,32 @@ function renderHistorial(){
     <div class="gasto-item">
       <div class="cat-dot" style="background:${catColor(g.cat)}"></div>
       <div class="gasto-info">
-        <div class="gasto-desc">${g.desc||g.cat}<span class="pago-badge ${g.pago==='credito'?'badge-credito':'badge-debito'}">${g.pago==='credito'?'Crédito':'Débito'}</span></div>
+        <div class="gasto-desc">${g.desc||g.cat}
+          <span class="pago-badge ${g.pago==='credito'?'badge-credito':'badge-debito'}">${g.pago==='credito'?'Crédito':'Débito'}</span>
+          ${(g.moneda||'ARS')==='USD'?'<span class="pago-badge badge-usd">USD</span>':''}
+        </div>
         <div class="gasto-meta">${g.cat} · ${fmtDate(g.fecha)}</div>
       </div>
-      <div class="gasto-monto">${fmt(g.monto)}</div>
+      <div class="gasto-monto">${fmt(g.monto,g.moneda)}</div>
       <button class="btn-del" onclick="borrar(${g.id})">×</button>
     </div>
   `).join('');
 }
 
-function borrar(id){
-  gastos=gastos.filter(g=>g.id!==id);
-  save('pb2_gastos',gastos);
-  renderHistorial();
-  showToast('Gasto eliminado');
+async function borrar(id){
+  try{
+    const{error}=await sb.from('gastos').delete().eq('id',id);
+    if(error)throw error;
+    await cargarGastos();
+    renderHistorial();
+    showToast('Gasto eliminado');
+  }catch(e){
+    showToast('Error al eliminar');
+  }
 }
 
 function renderPresupuestos(){
-  const mg=gastosDelMes(viewYear,viewMonth);
+  const mg=gastosDelMes(viewYear,viewMonth).filter(g=>g.moneda==='ARS'||!g.moneda);
   const byCat={};mg.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
   document.getElementById('lista-presupuestos').innerHTML=cats.map(c=>{
     const lim=presupuestos[c.name];
@@ -419,13 +533,13 @@ function renderPresupuestos(){
 function setPresup(cat,val){
   if(val&&parseFloat(val)>0)presupuestos[cat]=parseFloat(val);
   else delete presupuestos[cat];
-  save('pb2_presup',presupuestos);
+  saveLocal('pb3_presup',presupuestos);
   renderPresupuestos();
 }
 
 function exportCSV(){
   if(!gastos.length){showToast('No hay gastos aún');return}
-  const rows=[['Fecha','Descripción','Categoría','Medio de pago','Monto'],...gastos.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(g=>[g.fecha,`"${g.desc}"`,g.cat,g.pago==='credito'?'Crédito':'Débito/QR',g.monto])];
+  const rows=[['Fecha','Descripción','Categoría','Medio de pago','Moneda','Monto'],...gastos.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(g=>[g.fecha,`"${g.desc}"`,g.cat,g.pago==='credito'?'Crédito':'Débito/QR',g.moneda||'ARS',g.monto])];
   const csv=rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
@@ -439,8 +553,13 @@ function showToast(msg){
   setTimeout(()=>t.style.opacity='0',2200);
 }
 
-initAgregar();
-renderResumen();
+async function init(){
+  await cargarGastos();
+  initAgregar();
+  renderResumen();
+}
+
+init();
 </script>
 </body>
 </html>
