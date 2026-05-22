@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Presupuestando">
 <title>Presupuestando</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f7;color:#1d1d1f;min-height:100vh}
@@ -16,7 +17,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .header p{font-size:13px;color:#6e6e73;margin-top:2px}
 .tab-bar{display:flex;background:#fff;border-bottom:1px solid #e5e5e5;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .tab-bar::-webkit-scrollbar{display:none}
-.tab{flex:1;min-width:80px;padding:12px 8px;font-size:13px;font-weight:500;color:#6e6e73;border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab{flex:1;min-width:70px;padding:12px 6px;font-size:12px;font-weight:500;color:#6e6e73;border:none;background:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
 .tab.active{color:#007aff;border-bottom-color:#007aff}
 .content{padding:16px;max-width:600px;margin:0 auto}
 .card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
@@ -77,10 +78,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pago-split-item{flex:1;background:#f2f2f7;border-radius:12px;padding:12px;text-align:center}
 .pago-split-label{font-size:11px;color:#6e6e73;margin-bottom:4px}
 .pago-split-val{font-size:16px;font-weight:700}
-.loading{text-align:center;padding:20px;color:#6e6e73;font-size:14px}
-.sync-indicator{font-size:11px;color:#6e6e73;text-align:right;margin-bottom:8px}
+.sync-indicator{font-size:11px;color:#6e6e73}
 .sync-ok{color:#34c759}
 .sync-err{color:#ff3b30}
+/* REPORTE */
+.reporte-header{text-align:center;margin-bottom:20px}
+.reporte-mes{font-size:24px;font-weight:700;color:#1d1d1f}
+.reporte-sub{font-size:13px;color:#6e6e73;margin-top:4px}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.kpi{background:#f2f2f7;border-radius:14px;padding:14px;text-align:center}
+.kpi-val{font-size:20px;font-weight:700;color:#1d1d1f}
+.kpi-label{font-size:11px;color:#6e6e73;margin-top:4px}
+.kpi-diff{font-size:12px;font-weight:600;margin-top:4px}
+.kpi.full{grid-column:1/-1}
+.cat-reporte-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #f2f2f7}
+.cat-reporte-row:last-child{border-bottom:none}
+.cat-reporte-info{flex:1;min-width:0}
+.cat-reporte-name{font-size:14px;font-weight:500;color:#1d1d1f}
+.cat-reporte-diffs{display:flex;gap:8px;margin-top:3px;flex-wrap:wrap}
+.cat-diff-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px}
+.diff-up{background:#fff0f0;color:#cc2200}
+.diff-down{background:#f0fff4;color:#1d9e3e}
+.diff-neutral{background:#f2f2f7;color:#6e6e73}
+.cat-reporte-monto{font-size:15px;font-weight:700;color:#1d1d1f;white-space:nowrap}
+.btn-pdf{width:100%;padding:14px;background:#ff3b30;color:#fff;border:none;border-radius:14px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
 .tab-content{display:none}
 .tab-content.active{display:block}
@@ -93,13 +114,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <h1>Presupuestando 💰</h1>
     <p id="sync-status" class="sync-indicator">Conectando...</p>
   </div>
-  <button class="btn-export" onclick="exportCSV()">Exportar</button>
+  <button class="btn-export" onclick="exportCSV()">CSV</button>
 </div>
 
 <div class="tab-bar">
   <button class="tab active" onclick="switchTab('resumen')">Resumen</button>
   <button class="tab" onclick="switchTab('agregar')">+ Agregar</button>
   <button class="tab" onclick="switchTab('historial')">Historial</button>
+  <button class="tab" onclick="switchTab('reporte')">Reporte</button>
   <button class="tab" onclick="switchTab('presupuestos')">Límites</button>
 </div>
 
@@ -183,6 +205,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card"><div id="lista-historial"></div></div>
   </div>
 
+  <div id="tab-reporte" class="tab-content">
+    <div class="month-nav">
+      <button onclick="changeMonthReporte(-1)">‹</button>
+      <span id="reporte-mes-label"></span>
+      <button onclick="changeMonthReporte(1)">›</button>
+    </div>
+    <div id="reporte-contenido"></div>
+    <button class="btn-pdf" onclick="descargarPDF()">📄 Descargar PDF</button>
+  </div>
+
   <div id="tab-presupuestos" class="tab-content">
     <div class="card" style="margin-bottom:14px">
       <div class="section-title">Este mes vs límite (ARS)</div>
@@ -228,6 +260,8 @@ let monedaSel='ARS';
 const now=new Date();
 let viewYear=now.getFullYear();
 let viewMonth=now.getMonth();
+let reporteYear=now.getFullYear();
+let reporteMonth=now.getMonth();
 
 function fmt(n,moneda='ARS'){
   if(moneda==='USD') return 'U$S '+new Intl.NumberFormat('es-AR',{maximumFractionDigits:2}).format(n);
@@ -271,13 +305,14 @@ function selMoneda(m){
 
 function switchTab(t){
   document.querySelectorAll('.tab').forEach((el,i)=>{
-    el.classList.toggle('active',['resumen','agregar','historial','presupuestos'][i]===t);
+    el.classList.toggle('active',['resumen','agregar','historial','reporte','presupuestos'][i]===t);
   });
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+t).classList.add('active');
   if(t==='resumen')renderResumen();
   if(t==='agregar')initAgregar();
   if(t==='historial')renderHistorial();
+  if(t==='reporte')renderReporte();
   if(t==='presupuestos')renderPresupuestos();
 }
 
@@ -288,8 +323,19 @@ function changeMonth(d){
   renderResumen();
 }
 
+function changeMonthReporte(d){
+  reporteMonth+=d;
+  if(reporteMonth>11){reporteMonth=0;reporteYear++}
+  if(reporteMonth<0){reporteMonth=11;reporteYear--}
+  renderReporte();
+}
+
 function gastosDelMes(y,m){
   return gastos.filter(g=>{const d=new Date(g.fecha+'T12:00:00');return d.getFullYear()===y&&d.getMonth()===m});
+}
+
+function gastosARSDelMes(y,m){
+  return gastosDelMes(y,m).filter(g=>g.moneda==='ARS'||!g.moneda);
 }
 
 function renderResumen(){
@@ -299,8 +345,7 @@ function renderResumen(){
   const total=mgARS.reduce((s,g)=>s+g.monto,0);
   const pm=viewMonth===0?11:viewMonth-1;
   const py=viewMonth===0?viewYear-1:viewYear;
-  const prevMg=gastosDelMes(py,pm).filter(g=>g.moneda==='ARS'||!g.moneda);
-  const prevTotal=prevMg.reduce((s,g)=>s+g.monto,0);
+  const prevTotal=gastosARSDelMes(py,pm).reduce((s,g)=>s+g.monto,0);
   const dias=new Set(mgARS.map(g=>g.fecha)).size;
   const prom=dias?total/dias:0;
   const diff=prevTotal?((total-prevTotal)/prevTotal*100):null;
@@ -328,37 +373,21 @@ function renderResumen(){
   document.getElementById('pago-split-card').innerHTML=`
     <div class="section-title">Débito vs Crédito (ARS)</div>
     <div class="pago-split">
-      <div class="pago-split-item">
-        <div class="pago-split-label">💳 Débito / QR</div>
-        <div class="pago-split-val" style="color:#1d9e3e">${fmt(totalDeb)}</div>
-      </div>
-      <div class="pago-split-item">
-        <div class="pago-split-label">💜 Crédito</div>
-        <div class="pago-split-val" style="color:#7a2fa0">${fmt(totalCred)}</div>
-      </div>
-    </div>
-  `;
+      <div class="pago-split-item"><div class="pago-split-label">💳 Débito / QR</div><div class="pago-split-val" style="color:#1d9e3e">${fmt(totalDeb)}</div></div>
+      <div class="pago-split-item"><div class="pago-split-label">💜 Crédito</div><div class="pago-split-val" style="color:#7a2fa0">${fmt(totalCred)}</div></div>
+    </div>`;
 
-  const mgUSD=mg.filter(g=>g.moneda==='USD');
-  const totalUSD=mgUSD.reduce((s,g)=>s+g.monto,0);
+  const totalUSD=mg.filter(g=>g.moneda==='USD').reduce((s,g)=>s+g.monto,0);
   document.getElementById('moneda-split-card').innerHTML=`
     <div class="section-title">Gastos en USD</div>
     <div class="pago-split">
-      <div class="pago-split-item">
-        <div class="pago-split-label">🇦🇷 Pesos</div>
-        <div class="pago-split-val" style="color:#0055cc">${fmt(total)}</div>
-      </div>
-      <div class="pago-split-item">
-        <div class="pago-split-label">🇺🇸 Dólares</div>
-        <div class="pago-split-val" style="color:#cc7000">${fmt(totalUSD,'USD')}</div>
-      </div>
-    </div>
-  `;
+      <div class="pago-split-item"><div class="pago-split-label">🇦🇷 Pesos</div><div class="pago-split-val" style="color:#0055cc">${fmt(total)}</div></div>
+      <div class="pago-split-item"><div class="pago-split-label">🇺🇸 Dólares</div><div class="pago-split-val" style="color:#cc7000">${fmt(totalUSD,'USD')}</div></div>
+    </div>`;
 
   const byCat={};
   mgARS.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
   const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-
   if(!sorted.length){
     document.getElementById('chart-cats').innerHTML='<div class="empty">Sin gastos este mes</div>';
   }else{
@@ -368,8 +397,7 @@ function renderResumen(){
         <span class="bar-label">${cat}</span>
         <div class="bar-track"><div class="bar-fill" style="width:${(val/max*100).toFixed(0)}%;background:${catColor(cat)}"></div></div>
         <span class="bar-amt">${fmt(val)}</span>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
 
   const recientes=mg.slice().sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).slice(0,6);
@@ -387,9 +415,238 @@ function renderResumen(){
           <div class="gasto-meta">${g.cat} · ${fmtDate(g.fecha)}</div>
         </div>
         <div class="gasto-monto">${fmt(g.monto,g.moneda)}</div>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
+}
+
+function renderReporte(){
+  const ry=reporteYear, rm=reporteMonth;
+  document.getElementById('reporte-mes-label').textContent=`${MESES[rm]} ${ry}`;
+
+  const mg=gastosARSDelMes(ry,rm);
+  const total=mg.reduce((s,g)=>s+g.monto,0);
+
+  const pm=rm===0?11:rm-1;
+  const py=rm===0?ry-1:ry;
+  const prevMg=gastosARSDelMes(py,pm);
+  const prevTotal=prevMg.reduce((s,g)=>s+g.monto,0);
+
+  // promedio del año (todos los meses con datos en el año)
+  const mesesConDatos=[];
+  for(let m=0;m<12;m++){
+    if(m===rm&&ry===now.getFullYear()&&m===now.getMonth()) continue;
+    const t=gastosARSDelMes(ry,m).reduce((s,g)=>s+g.monto,0);
+    if(t>0) mesesConDatos.push(t);
+  }
+  const promedioAnual=mesesConDatos.length?mesesConDatos.reduce((a,b)=>a+b,0)/mesesConDatos.length:0;
+
+  const diffPrev=prevTotal?((total-prevTotal)/prevTotal*100):null;
+  const diffProm=promedioAnual?((total-promedioAnual)/promedioAnual*100):null;
+
+  function diffBadge(pct,label){
+    if(pct===null) return '';
+    const cls=pct>5?'diff-up':pct<-5?'diff-down':'diff-neutral';
+    const sign=pct>0?'+':'';
+    return `<span class="cat-diff-badge ${cls}">${label}: ${sign}${pct.toFixed(1)}%</span>`;
+  }
+
+  // por categoría
+  const byCat={};
+  mg.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
+  const prevByCat={};
+  prevMg.forEach(g=>{prevByCat[g.cat]=(prevByCat[g.cat]||0)+g.monto});
+
+  // promedio anual por categoría
+  const promByCat={};
+  cats.forEach(c=>{
+    const vals=[];
+    for(let m=0;m<12;m++){
+      if(m===rm&&ry===now.getFullYear()&&m===now.getMonth()) continue;
+      const t=gastosARSDelMes(ry,m).filter(g=>g.cat===c.name).reduce((s,g)=>s+g.monto,0);
+      if(t>0) vals.push(t);
+    }
+    promByCat[c.name]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+  });
+
+  const sortedCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+
+  let html=`
+    <div class="card">
+      <div class="section-title">Resumen general</div>
+      <div class="kpi-grid">
+        <div class="kpi full">
+          <div class="kpi-val">${fmt(total)}</div>
+          <div class="kpi-label">Total gastado (ARS)</div>
+          ${diffPrev!==null?`<div class="kpi-diff" style="color:${diffPrev>0?'#ff3b30':'#34c759'}">${diffPrev>0?'▲':'▼'} ${Math.abs(diffPrev).toFixed(1)}% vs ${MESES[pm]}</div>`:''}
+          ${diffProm!==null?`<div class="kpi-diff" style="color:${diffProm>0?'#ff9500':'#007aff'}">${diffProm>0?'▲':'▼'} ${Math.abs(diffProm).toFixed(1)}% vs promedio del año</div>`:''}
+        </div>
+        <div class="kpi">
+          <div class="kpi-val">${fmt(prevTotal)}</div>
+          <div class="kpi-label">${MESES[pm]} ${py}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-val">${promedioAnual?fmt(promedioAnual):'—'}</div>
+          <div class="kpi-label">Promedio mensual ${ry}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Por categoría</div>
+      ${sortedCats.length===0?'<div class="empty">Sin gastos este mes</div>':sortedCats.map(([cat,val])=>{
+        const pct=total?val/total*100:0;
+        const dprev=prevByCat[cat]?((val-prevByCat[cat])/prevByCat[cat]*100):null;
+        const dprom=promByCat[cat]?((val-promByCat[cat])/promByCat[cat]*100):null;
+        return`<div class="cat-reporte-row">
+          <div class="cat-dot" style="background:${catColor(cat)}"></div>
+          <div class="cat-reporte-info">
+            <div class="cat-reporte-name">${cat} <span style="font-size:12px;color:#6e6e73">${pct.toFixed(0)}%</span></div>
+            <div class="cat-reporte-diffs">
+              ${diffBadge(dprev,'vs mes ant.')}
+              ${diffBadge(dprom,'vs promedio')}
+            </div>
+          </div>
+          <div class="cat-reporte-monto">${fmt(val)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  // USD en el mes
+  const mgUSD=gastosDelMes(ry,rm).filter(g=>g.moneda==='USD');
+  const totalUSD=mgUSD.reduce((s,g)=>s+g.monto,0);
+  if(totalUSD>0){
+    html+=`<div class="card">
+      <div class="section-title">Gastos en USD</div>
+      <div class="kpi-grid">
+        <div class="kpi full"><div class="kpi-val">${fmt(totalUSD,'USD')}</div><div class="kpi-label">Total en dólares</div></div>
+      </div>
+    </div>`;
+  }
+
+  document.getElementById('reporte-contenido').innerHTML=html;
+}
+
+async function descargarPDF(){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const ry=reporteYear,rm=reporteMonth;
+  const mg=gastosARSDelMes(ry,rm);
+  const total=mg.reduce((s,g)=>s+g.monto,0);
+  const pm=rm===0?11:rm-1;
+  const py=rm===0?ry-1:ry;
+  const prevTotal=gastosARSDelMes(py,pm).reduce((s,g)=>s+g.monto,0);
+  const mesesConDatos=[];
+  for(let m=0;m<12;m++){
+    if(m===rm) continue;
+    const t=gastosARSDelMes(ry,m).reduce((s,g)=>s+g.monto,0);
+    if(t>0) mesesConDatos.push(t);
+  }
+  const promedioAnual=mesesConDatos.length?mesesConDatos.reduce((a,b)=>a+b,0)/mesesConDatos.length:0;
+  const byCat={};
+  mg.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
+  const prevByCat={};
+  gastosARSDelMes(py,pm).forEach(g=>{prevByCat[g.cat]=(prevByCat[g.cat]||0)+g.monto});
+
+  // encabezado
+  doc.setFillColor(0,122,255);
+  doc.rect(0,0,210,30,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(20);
+  doc.setFont('helvetica','bold');
+  doc.text('Presupuestando',14,13);
+  doc.setFontSize(12);
+  doc.setFont('helvetica','normal');
+  doc.text(`Reporte de ${MESES[rm]} ${ry}`,14,22);
+
+  let y=40;
+  doc.setTextColor(30,30,30);
+
+  // total
+  doc.setFillColor(242,242,247);
+  doc.roundedRect(14,y,182,22,4,4,'F');
+  doc.setFontSize(11);
+  doc.setFont('helvetica','bold');
+  doc.text('Total gastado (ARS)',18,y+8);
+  doc.setFontSize(16);
+  doc.text(fmt(total),18,y+18);
+  if(prevTotal){
+    const d=((total-prevTotal)/prevTotal*100);
+    doc.setFontSize(9);
+    doc.setTextColor(d>0?200:29,d>0?50:158,d>0?50:75);
+    doc.text(`${d>0?'▲':'▼'} ${Math.abs(d).toFixed(1)}% vs ${MESES[pm]}`,120,y+10);
+    doc.setTextColor(30,30,30);
+  }
+  if(promedioAnual){
+    const d=((total-promedioAnual)/promedioAnual*100);
+    doc.setFontSize(9);
+    doc.setTextColor(d>0?200:0,d>0?50:122,d>0?50:255);
+    doc.text(`${d>0?'▲':'▼'} ${Math.abs(d).toFixed(1)}% vs promedio anual`,120,y+18);
+    doc.setTextColor(30,30,30);
+  }
+  y+=30;
+
+  // comparativa meses
+  doc.setFillColor(242,242,247);
+  doc.roundedRect(14,y,88,18,4,4,'F');
+  doc.roundedRect(108,y,88,18,4,4,'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica','normal');
+  doc.setTextColor(110,110,115);
+  doc.text(`${MESES[pm]} ${py}`,18,y+6);
+  doc.text(`Promedio mensual ${ry}`,112,y+6);
+  doc.setFontSize(12);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(30,30,30);
+  doc.text(fmt(prevTotal),18,y+14);
+  doc.text(promedioAnual?fmt(promedioAnual):'—',112,y+14);
+  y+=26;
+
+  // por categoría
+  doc.setFontSize(11);
+  doc.setFont('helvetica','bold');
+  doc.setTextColor(110,110,115);
+  doc.text('POR CATEGORÍA',14,y);
+  y+=6;
+
+  const sortedCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  sortedCats.forEach(([cat,val])=>{
+    if(y>270){doc.addPage();y=20;}
+    const pct=total?val/total*100:0;
+    const dprev=prevByCat[cat]?((val-prevByCat[cat])/prevByCat[cat]*100):null;
+
+    doc.setFillColor(248,248,250);
+    doc.roundedRect(14,y,182,14,3,3,'F');
+
+    // dot color
+    const col=catColor(cat);
+    const r=parseInt(col.slice(1,3),16),g2=parseInt(col.slice(3,5),16),b=parseInt(col.slice(5,7),16);
+    doc.setFillColor(r,g2,b);
+    doc.circle(19,y+7,2,'F');
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(30,30,30);
+    doc.text(`${cat} (${pct.toFixed(0)}%)`,24,y+8);
+    doc.setFont('helvetica','normal');
+    doc.text(fmt(val),130,y+8);
+    if(dprev!==null){
+      doc.setFontSize(8);
+      doc.setTextColor(dprev>0?200:29,dprev>0?50:158,dprev>0?50:75);
+      doc.text(`${dprev>0?'▲':'▼'}${Math.abs(dprev).toFixed(0)}%`,170,y+8);
+    }
+    doc.setTextColor(30,30,30);
+    y+=16;
+  });
+
+  // pie
+  y=Math.max(y+10,275);
+  doc.setFontSize(8);
+  doc.setTextColor(180,180,180);
+  doc.text(`Generado por Presupuestando · ${new Date().toLocaleDateString('es-AR')}`,14,285);
+
+  doc.save(`reporte-${MESES[rm].toLowerCase()}-${ry}.pdf`);
+  showToast('PDF descargado');
 }
 
 function initAgregar(){
@@ -414,20 +671,10 @@ async function agregarGasto(){
     cats.push({name:catNueva,color:palette[cats.length%palette.length]});
     saveLocal('pb3_cats',cats);
   }
-
   const btn=document.getElementById('btn-guardar');
-  btn.textContent='Guardando...';
-  btn.disabled=true;
-
+  btn.textContent='Guardando...';btn.disabled=true;
   try{
-    const{error}=await sb.from('gastos').insert({
-      monto,
-      descripcion:desc,
-      categoria:cat,
-      fecha,
-      pago:pagoSel,
-      moneda:monedaSel
-    });
+    const{error}=await sb.from('gastos').insert({monto,descripcion:desc,categoria:cat,fecha,pago:pagoSel,moneda:monedaSel});
     if(error)throw error;
     await cargarGastos();
     document.getElementById('f-monto').value='';
@@ -435,12 +682,8 @@ async function agregarGasto(){
     document.getElementById('f-nueva-cat').value='';
     showToast('✓ Gasto guardado');
     switchTab('resumen');
-  }catch(e){
-    showToast('Error al guardar');
-  }finally{
-    btn.textContent='Guardar gasto';
-    btn.disabled=false;
-  }
+  }catch(e){showToast('Error al guardar');}
+  finally{btn.textContent='Guardar gasto';btn.disabled=false;}
 }
 
 function renderHistorial(){
@@ -449,8 +692,7 @@ function renderHistorial(){
   const fPago=document.getElementById('filtro-pago');
   const fMoneda=document.getElementById('filtro-moneda');
   const mesesDisp=[...new Set(gastos.map(g=>g.fecha.slice(0,7)))].sort().reverse();
-  const prevMes=fMes.value;
-  const prevCat=fCat.value;
+  const prevMes=fMes.value, prevCat=fCat.value;
   fMes.innerHTML='<option value="">Todos los meses</option>'+mesesDisp.map(m=>{
     const[y,mo]=m.split('-');
     return`<option value="${m}">${MESES[parseInt(mo)-1]} ${y}</option>`;
@@ -466,10 +708,7 @@ function renderHistorial(){
   if(pV==='credito')f=f.filter(g=>g.pago==='credito');
   if(mnV)f=f.filter(g=>(g.moneda||'ARS')===mnV);
   f.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  if(!f.length){
-    document.getElementById('lista-historial').innerHTML='<div class="empty">Sin gastos con ese filtro</div>';
-    return;
-  }
+  if(!f.length){document.getElementById('lista-historial').innerHTML='<div class="empty">Sin gastos con ese filtro</div>';return;}
   document.getElementById('lista-historial').innerHTML=f.map(g=>`
     <div class="gasto-item">
       <div class="cat-dot" style="background:${catColor(g.cat)}"></div>
@@ -482,8 +721,7 @@ function renderHistorial(){
       </div>
       <div class="gasto-monto">${fmt(g.monto,g.moneda)}</div>
       <button class="btn-del" onclick="borrar(${g.id})">×</button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function borrar(id){
@@ -493,41 +731,27 @@ async function borrar(id){
     await cargarGastos();
     renderHistorial();
     showToast('Gasto eliminado');
-  }catch(e){
-    showToast('Error al eliminar');
-  }
+  }catch(e){showToast('Error al eliminar');}
 }
 
 function renderPresupuestos(){
-  const mg=gastosDelMes(viewYear,viewMonth).filter(g=>g.moneda==='ARS'||!g.moneda);
+  const mg=gastosARSDelMes(viewYear,viewMonth);
   const byCat={};mg.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
   document.getElementById('lista-presupuestos').innerHTML=cats.map(c=>{
-    const lim=presupuestos[c.name];
-    const gast=byCat[c.name]||0;
+    const lim=presupuestos[c.name],gast=byCat[c.name]||0;
     if(!lim&&!gast)return'';
     const pct=lim?Math.min(gast/lim*100,100):0;
     const col=pct>90?'#ff3b30':pct>70?'#ff9500':'#34c759';
     return`<div class="presup-row">
-      <div style="display:flex;align-items:center;gap:6px;flex:1">
-        <div class="cat-dot" style="background:${c.color}"></div>
-        <span class="presup-name">${c.name}</span>
-      </div>
-      ${lim?`<div class="presup-prog"><div class="presup-fill" style="width:${pct.toFixed(0)}%;background:${col}"></div></div>
-      <span class="presup-nums">${fmt(gast)} / ${fmt(lim)}</span>`
-      :`<span class="presup-nums">${fmt(gast)}</span>`}
+      <div style="display:flex;align-items:center;gap:6px;flex:1"><div class="cat-dot" style="background:${c.color}"></div><span class="presup-name">${c.name}</span></div>
+      ${lim?`<div class="presup-prog"><div class="presup-fill" style="width:${pct.toFixed(0)}%;background:${col}"></div></div><span class="presup-nums">${fmt(gast)} / ${fmt(lim)}</span>`:`<span class="presup-nums">${fmt(gast)}</span>`}
     </div>`;
   }).join('');
-
   document.getElementById('edit-presupuestos').innerHTML=cats.map(c=>`
     <div class="presup-row">
-      <div style="display:flex;align-items:center;gap:6px;flex:1">
-        <div class="cat-dot" style="background:${c.color}"></div>
-        <span class="presup-name">${c.name}</span>
-      </div>
-      <input class="presup-input" type="number" value="${presupuestos[c.name]||''}" placeholder="Sin límite"
-        onchange="setPresup('${c.name}',this.value)">
-    </div>
-  `).join('');
+      <div style="display:flex;align-items:center;gap:6px;flex:1"><div class="cat-dot" style="background:${c.color}"></div><span class="presup-name">${c.name}</span></div>
+      <input class="presup-input" type="number" value="${presupuestos[c.name]||''}" placeholder="Sin límite" onchange="setPresup('${c.name}',this.value)">
+    </div>`).join('');
 }
 
 function setPresup(cat,val){
