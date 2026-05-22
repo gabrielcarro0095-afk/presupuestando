@@ -48,6 +48,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .form-group label{font-size:13px;font-weight:500;color:#6e6e73;display:block;margin-bottom:6px}
 .form-group input,.form-group select{width:100%;padding:12px 14px;font-size:16px;border:1px solid #e5e5e5;border-radius:12px;background:#fff;color:#1d1d1f;font-family:inherit;-webkit-appearance:none}
 .form-group input:focus,.form-group select:focus{outline:none;border-color:#007aff}
+.pago-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pago-btn{padding:14px 10px;border:2px solid #e5e5e5;border-radius:14px;background:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;color:#6e6e73;text-align:center;transition:all 0.15s}
+.pago-btn.selected-debito{border-color:#34c759;background:#f0fff4;color:#1d9e3e}
+.pago-btn.selected-credito{border-color:#af52de;background:#faf0ff;color:#7a2fa0}
 .btn-primary{width:100%;padding:14px;background:#007aff;color:#fff;border:none;border-radius:14px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit}
 .btn-primary:active{background:#0062cc}
 .btn-export{background:#f2f2f7;border:none;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:500;color:#1d1d1f;cursor:pointer;font-family:inherit}
@@ -60,6 +64,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .presup-fill{height:100%;border-radius:3px}
 .presup-nums{font-size:11px;color:#6e6e73;white-space:nowrap;text-align:right;min-width:80px}
 .presup-input{width:90px;padding:6px 10px;font-size:13px;border:1px solid #e5e5e5;border-radius:8px;background:#fff;color:#1d1d1f;font-family:inherit;text-align:right}
+.pago-badge{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;margin-left:4px}
+.badge-debito{background:#f0fff4;color:#1d9e3e}
+.badge-credito{background:#faf0ff;color:#7a2fa0}
+.pago-split{display:flex;gap:8px}
+.pago-split-item{flex:1;background:#f2f2f7;border-radius:12px;padding:12px;text-align:center}
+.pago-split-label{font-size:11px;color:#6e6e73;margin-bottom:4px}
+.pago-split-val{font-size:16px;font-weight:700}
 .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
 .tab-content{display:none}
 .tab-content.active{display:block}
@@ -91,6 +102,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button onclick="changeMonth(1)">›</button>
     </div>
     <div class="metric-grid" id="metrics"></div>
+    <div class="card" id="pago-split-card"></div>
     <div class="card">
       <div class="section-title">Por categoría</div>
       <div id="chart-cats"></div>
@@ -121,6 +133,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <input type="text" id="f-nueva-cat" placeholder="Escribí una nueva">
       </div>
       <div class="form-group">
+        <label>Medio de pago</label>
+        <div class="pago-btns">
+          <button class="pago-btn selected-debito" id="btn-debito" onclick="selPago('debito')">💳 Débito / QR</button>
+          <button class="pago-btn" id="btn-credito" onclick="selPago('credito')">💜 Crédito</button>
+        </div>
+      </div>
+      <div class="form-group">
         <label>Fecha</label>
         <input type="date" id="f-fecha">
       </div>
@@ -132,6 +151,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="filter-row">
       <select id="filtro-mes" onchange="renderHistorial()"></select>
       <select id="filtro-cat" onchange="renderHistorial()"></select>
+      <select id="filtro-pago" onchange="renderHistorial()">
+        <option value="">Todo</option>
+        <option value="debito">Débito/QR</option>
+        <option value="credito">Crédito</option>
+      </select>
     </div>
     <div class="card"><div id="lista-historial"></div></div>
   </div>
@@ -171,6 +195,7 @@ function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 let gastos=load('pb2_gastos',[]);
 let cats=load('pb2_cats',CATS_DEFAULT);
 let presupuestos=load('pb2_presup',{});
+let pagoSel='debito';
 
 const now=new Date();
 let viewYear=now.getFullYear();
@@ -179,6 +204,12 @@ let viewMonth=now.getMonth();
 function fmt(n){return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n)}
 function fmtDate(d){const[y,m,day]=d.split('-');return`${day}/${m}/${y}`}
 function catColor(n){const c=cats.find(c=>c.name===n);return c?c.color:'#8e8e93'}
+
+function selPago(p){
+  pagoSel=p;
+  document.getElementById('btn-debito').className='pago-btn'+(p==='debito'?' selected-debito':'');
+  document.getElementById('btn-credito').className='pago-btn'+(p==='credito'?' selected-credito':'');
+}
 
 function switchTab(t){
   document.querySelectorAll('.tab').forEach((el,i)=>{
@@ -232,6 +263,22 @@ function renderResumen(){
     </div>
   `;
 
+  const totalDeb=mg.filter(g=>g.pago==='debito'||!g.pago).reduce((s,g)=>s+g.monto,0);
+  const totalCred=mg.filter(g=>g.pago==='credito').reduce((s,g)=>s+g.monto,0);
+  document.getElementById('pago-split-card').innerHTML=`
+    <div class="section-title">Débito vs Crédito</div>
+    <div class="pago-split">
+      <div class="pago-split-item">
+        <div class="pago-split-label">💳 Débito / QR</div>
+        <div class="pago-split-val" style="color:#1d9e3e">${fmt(totalDeb)}</div>
+      </div>
+      <div class="pago-split-item">
+        <div class="pago-split-label">💜 Crédito</div>
+        <div class="pago-split-val" style="color:#7a2fa0">${fmt(totalCred)}</div>
+      </div>
+    </div>
+  `;
+
   const byCat={};
   mg.forEach(g=>{byCat[g.cat]=(byCat[g.cat]||0)+g.monto});
   const sorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
@@ -257,7 +304,7 @@ function renderResumen(){
       <div class="gasto-item">
         <div class="cat-dot" style="background:${catColor(g.cat)}"></div>
         <div class="gasto-info">
-          <div class="gasto-desc">${g.desc||g.cat}</div>
+          <div class="gasto-desc">${g.desc||g.cat}<span class="pago-badge ${g.pago==='credito'?'badge-credito':'badge-debito'}">${g.pago==='credito'?'Crédito':'Débito'}</span></div>
           <div class="gasto-meta">${g.cat} · ${fmtDate(g.fecha)}</div>
         </div>
         <div class="gasto-monto">${fmt(g.monto)}</div>
@@ -270,6 +317,7 @@ function initAgregar(){
   document.getElementById('f-cat').innerHTML=cats.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
   const t=new Date();
   document.getElementById('f-fecha').value=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  selPago('debito');
 }
 
 function agregarGasto(){
@@ -286,7 +334,7 @@ function agregarGasto(){
     cats.push({name:catNueva,color:palette[cats.length%palette.length]});
     save('pb2_cats',cats);
   }
-  gastos.push({id:Date.now(),monto,desc,cat,fecha});
+  gastos.push({id:Date.now(),monto,desc,cat,fecha,pago:pagoSel});
   save('pb2_gastos',gastos);
   document.getElementById('f-monto').value='';
   document.getElementById('f-desc').value='';
@@ -298,6 +346,7 @@ function agregarGasto(){
 function renderHistorial(){
   const fMes=document.getElementById('filtro-mes');
   const fCat=document.getElementById('filtro-cat');
+  const fPago=document.getElementById('filtro-pago');
   const mesesDisp=[...new Set(gastos.map(g=>g.fecha.slice(0,7)))].sort().reverse();
   fMes.innerHTML='<option value="">Todos los meses</option>'+mesesDisp.map(m=>{
     const[y,mo]=m.split('-');
@@ -305,9 +354,11 @@ function renderHistorial(){
   }).join('');
   fCat.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
   let f=gastos.slice();
-  const mV=fMes.value,cV=fCat.value;
+  const mV=fMes.value,cV=fCat.value,pV=fPago.value;
   if(mV)f=f.filter(g=>g.fecha.startsWith(mV));
   if(cV)f=f.filter(g=>g.cat===cV);
+  if(pV==='debito')f=f.filter(g=>g.pago==='debito'||!g.pago);
+  if(pV==='credito')f=f.filter(g=>g.pago==='credito');
   f.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   if(!f.length){
     document.getElementById('lista-historial').innerHTML='<div class="empty">Sin gastos con ese filtro</div>';
@@ -317,7 +368,7 @@ function renderHistorial(){
     <div class="gasto-item">
       <div class="cat-dot" style="background:${catColor(g.cat)}"></div>
       <div class="gasto-info">
-        <div class="gasto-desc">${g.desc||g.cat}</div>
+        <div class="gasto-desc">${g.desc||g.cat}<span class="pago-badge ${g.pago==='credito'?'badge-credito':'badge-debito'}">${g.pago==='credito'?'Crédito':'Débito'}</span></div>
         <div class="gasto-meta">${g.cat} · ${fmtDate(g.fecha)}</div>
       </div>
       <div class="gasto-monto">${fmt(g.monto)}</div>
@@ -374,7 +425,7 @@ function setPresup(cat,val){
 
 function exportCSV(){
   if(!gastos.length){showToast('No hay gastos aún');return}
-  const rows=[['Fecha','Descripción','Categoría','Monto'],...gastos.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(g=>[g.fecha,`"${g.desc}"`,g.cat,g.monto])];
+  const rows=[['Fecha','Descripción','Categoría','Medio de pago','Monto'],...gastos.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(g=>[g.fecha,`"${g.desc}"`,g.cat,g.pago==='credito'?'Crédito':'Débito/QR',g.monto])];
   const csv=rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
